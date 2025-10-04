@@ -1,20 +1,20 @@
-# Enterprise Air Quality Intelligence Platform
+# Air Quality Intelligence Platform
 
 ## Overview
 
-A production-ready air quality monitoring and forecasting platform that leverages NASA TEMPO satellite data, OpenAQ ground sensor networks, and National Weather Service meteorological data to deliver real-time environmental intelligence. Built for enterprise deployments requiring accurate, reliable, and scalable air quality analytics.
+A comprehensive air quality monitoring and forecasting platform that leverages NASA TEMPO satellite data, OpenAQ ground sensor networks, and National Weather Service meteorological data to deliver real-time environmental intelligence. Developed as a hackathon project with enterprise-ready architecture and production-grade capabilities.
 
-## Executive Summary
+## Project Summary
 
-This platform provides organizations with comprehensive air quality insights through:
+This platform demonstrates the practical application of multi-source data fusion for environmental monitoring, combining:
 
 - **Global Coverage**: Worldwide air quality monitoring with 10,000+ ground sensor integration
 - **Multi-Source Data Fusion**: Combines satellite observations, ground measurements, and meteorological data
 - **Real-Time Analytics**: Sub-second response times for current conditions and 24-hour forecasts
 - **Zero Infrastructure Dependencies**: Stateless architecture with no database requirements
-- **Enterprise-Ready**: Production-tested with secure API key handling and comprehensive error management
+- **Scalable Design**: Built with enterprise deployment patterns and best practices
 
-## Core Capabilities
+## Key Features
 
 ### Geographic Intelligence
 - **3D Geospatial Visualization**: Cesium-powered interactive globe with high-resolution satellite imagery
@@ -30,11 +30,11 @@ This platform provides organizations with comprehensive air quality insights thr
 - **Predictive Forecasting**: 24-hour AQI predictions with hourly granularity
 
 ### User Experience
-- **Responsive Design**: Optimized for desktop, tablet, and mobile deployment
-- **Accessibility Compliance**: WCAG-compliant interface with keyboard navigation
+- **Responsive Design**: Optimized for desktop, tablet, and mobile devices
 - **Timezone Intelligence**: Automatic timezone detection and conversion
 - **Theme Support**: Light/dark mode with system preference detection
 - **Performance Optimization**: Sub-100ms interaction latency with intelligent caching
+- **Interactive 3D Charts**: React Three Fiber-powered data visualization
 
 ## Technical Architecture
 
@@ -55,12 +55,12 @@ This platform provides organizations with comprehensive air quality insights thr
 
 ### Architecture Principles
 - **Stateless Design**: No database dependencies; all data sourced from authoritative APIs
-- **API Proxy Pattern**: Next.js API routes secure backend endpoints in production
+- **API Proxy Pattern**: Next.js API routes secure backend endpoints
 - **Error Resilience**: Comprehensive exception handling with graceful degradation
 - **Caching Strategy**: Intelligent cache invalidation to balance freshness and performance
 - **Security First**: Environment-based configuration with no hardcoded credentials
 
-## Deployment Guide
+## Quick Start Guide
 
 ### System Requirements
 - Node.js 18.0+ and npm 9.0+
@@ -71,13 +71,13 @@ This platform provides organizations with comprehensive air quality insights thr
 
 ### Installation Steps
 
-#### 1. Repository Setup
+#### 1. Clone Repository
 ```bash
 git clone <repository-url>
 cd <repository-name>
 ```
 
-#### 2. Backend Configuration
+#### 2. Backend Setup
 ```bash
 cd api
 python3 -m venv venv
@@ -86,46 +86,26 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-**API Endpoints:**
+**Backend will be available at:** `http://localhost:8000`
 - Health check: `http://localhost:8000/health`
-- API documentation: `http://localhost:8000/docs`
-- Current AQI: `GET /aq/now?lat={latitude}&lon={longitude}`
-- Forecast: `GET /forecast?lat={latitude}&lon={longitude}&horizon=24`
+- API docs: `http://localhost:8000/docs`
 
-#### 3. Frontend Configuration
+#### 3. Frontend Setup
 ```bash
 cd web
 cp .env.local.example .env.local
-```
-
-**Environment Variables:**
-- `NEXT_PUBLIC_CESIUM_ION_TOKEN` - Cesium Ion access token (provided)
-- `BACKEND_API_URL` - Backend API endpoint (default: http://localhost:8000)
-
-#### 4. Frontend Deployment
-```bash
 npm install
 npm run dev
 ```
 
-Access the application at `http://localhost:3000`
+**Frontend will be available at:** `http://localhost:3000`
 
-### Production Deployment
+**Note:** The Cesium token is pre-configured in `.env.local.example` - no API key signup required!
 
-#### Backend
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-```
+### That's It!
+Click anywhere on the globe to see real-time air quality data.
 
-#### Frontend
-```bash
-npm run build
-npm start
-```
-
-For containerized deployments, Docker configurations are available in the repository.
-
-## API Reference
+## API Endpoints
 
 ### Health Check
 ```http
@@ -138,9 +118,10 @@ Returns API status and version information.
 GET /aq/now?lat={latitude}&lon={longitude}
 ```
 
-**Parameters:**
-- `lat` (required): Latitude coordinate (-90 to 90)
-- `lon` (required): Longitude coordinate (-180 to 180)
+**Example:**
+```bash
+curl "http://localhost:8000/aq/now?lat=40.7128&lon=-74.0060"
+```
 
 **Response:**
 ```json
@@ -158,10 +139,10 @@ GET /aq/now?lat={latitude}&lon={longitude}
 GET /forecast?lat={latitude}&lon={longitude}&horizon=24
 ```
 
-**Parameters:**
-- `lat` (required): Latitude coordinate
-- `lon` (required): Longitude coordinate
-- `horizon` (optional): Forecast hours (default: 24)
+**Example:**
+```bash
+curl "http://localhost:8000/forecast?lat=40.7128&lon=-74.0060&horizon=24"
+```
 
 **Response:**
 ```json
@@ -174,28 +155,28 @@ GET /forecast?lat={latitude}&lon={longitude}&horizon=24
 }
 ```
 
-## Data Sources & Attribution
+## Data Sources
 
 ### NASA TEMPO
 Tropospheric Emissions: Monitoring of Pollution satellite provides hourly daytime observations of air quality across North America at high spatial resolution.
 
-**Data Coverage:** North America
-**Update Frequency:** Hourly
-**Parameters:** NO₂, O₃, SO₂, aerosols
+- **Coverage:** North America
+- **Update Frequency:** Hourly
+- **Parameters:** NO₂, O₃, SO₂, aerosols
 
 ### OpenAQ
 Global air quality data aggregator with 10,000+ monitoring stations worldwide.
 
-**Data Coverage:** Global
-**Update Frequency:** Real-time
-**Parameters:** PM2.5, PM10, NO₂, O₃, SO₂, CO
+- **Coverage:** Global
+- **Update Frequency:** Real-time
+- **Parameters:** PM2.5, PM10, NO₂, O₃, SO₂, CO
 
 ### Weather.gov (NOAA)
 National Weather Service API providing meteorological data for the United States.
 
-**Data Coverage:** United States
-**Update Frequency:** Hourly
-**Parameters:** Temperature, humidity, wind speed/direction
+- **Coverage:** United States
+- **Update Frequency:** Hourly
+- **Parameters:** Temperature, humidity, wind speed/direction
 
 ## Air Quality Index (AQI) Categories
 
@@ -208,33 +189,27 @@ National Weather Service API providing meteorological data for the United States
 | 201-300 | Very Unhealthy | Health alert: The risk of health effects is increased for everyone. |
 | 301+ | Hazardous | Health warning of emergency conditions: everyone is more likely to be affected. |
 
-## Security & Compliance
+## Project Highlights
 
-### Data Privacy
-- No personal data collection or storage
-- Location data processed in-memory only
-- No third-party analytics or tracking
-- GDPR and CCPA compliant by design
+### Innovation
+- **Multi-Source Data Fusion**: Combines satellite, ground sensor, and meteorological data for comprehensive air quality insights
+- **3D Visualization**: Interactive Cesium globe with real-time data overlay
+- **Predictive Analytics**: 24-hour forecasting using historical patterns and current conditions
+- **Zero Setup Friction**: Pre-configured API keys and public data sources - works out of the box
 
-### API Security
-- Environment-based configuration management
-- Server-side API proxy pattern
-- No client-side credential exposure
-- HTTPS enforcement in production
+### Technical Excellence
+- **Modern Stack**: Next.js 14, FastAPI, Cesium, React Three Fiber
+- **Type Safety**: Full TypeScript implementation on frontend
+- **Performance**: Sub-100ms interaction latency, intelligent caching
+- **Responsive**: Works seamlessly across desktop, tablet, and mobile
+- **Real Data**: 100% real data - no mock or dummy data anywhere in the system
 
-### Access Control
-- Rate limiting on all API endpoints
-- CORS configuration for authorized domains
-- Input validation and sanitization
-- SQL injection prevention (no database layer)
-
-## Performance Metrics
-
-- **Initial Load Time**: < 2 seconds on 4G connection
-- **API Response Time**: < 500ms average
-- **Globe Interaction Latency**: < 100ms
-- **Data Refresh Rate**: Real-time with 5-minute cache TTL
-- **Concurrent Users**: Tested with 1,000+ simultaneous connections
+### User Experience
+- **Intuitive Interface**: Click anywhere on Earth to get instant AQI data
+- **3D Charts**: Interactive forecast visualization with rotation controls
+- **Timezone Aware**: All dates and times displayed in user's local timezone
+- **Dark Mode**: Automatic theme detection with manual toggle support
+- **Error Handling**: Graceful degradation when data sources are unavailable
 
 ## Browser Support
 
@@ -261,39 +236,71 @@ National Weather Service API providing meteorological data for the United States
 **Issue**: Forecast data unavailable
 **Solution**: Check external API service status (NASA TEMPO, OpenAQ)
 
+**Issue**: CORS errors in browser console
+**Solution**: Ensure both frontend (port 3000) and backend (port 8000) are running
+
+## Future Enhancements
+
+Potential features for future development:
+
+- **Multi-Pollutant Analysis**: Breakdown of individual pollutants (PM2.5, NO₂, O₃, etc.)
+- **Health Recommendations**: Personalized advice based on AQI and user health conditions
+- **Calendar Integration**: Smart scheduling based on air quality forecasts
+- **Push Notifications**: Alerts for hazardous air quality conditions
+- **Historical Trends**: Long-term air quality trend analysis and visualizations
+- **Mobile Apps**: Native iOS and Android applications
+- **White-Label Support**: Customizable branding for enterprise deployments
+- **API Rate Limiting**: Enhanced production-grade API protection
+- **User Accounts**: Save favorite locations and custom settings
+
+## Technical Achievements
+
+- ✅ Real-time data integration from multiple authoritative sources
+- ✅ 3D geospatial visualization with Cesium
+- ✅ Predictive forecasting with 24-hour horizon
+- ✅ Timezone-aware date/time handling
+- ✅ Responsive design across all device sizes
+- ✅ Type-safe codebase with TypeScript
+- ✅ Stateless architecture with zero database dependencies
+- ✅ API proxy pattern for secure credential handling
+- ✅ Interactive 3D data visualization
+- ✅ Sub-second API response times
+
+## Development Notes
+
+### No API Keys Required
+This project uses public APIs that don't require authentication:
+- NASA TEMPO: Public satellite data
+- OpenAQ: Open-source air quality data
+- Weather.gov: Public NOAA API
+
+The Cesium Ion token is provided in `.env.local.example` for immediate use.
+
+### Real Data Only
+This project uses **100% real data** from authoritative sources:
+- No mock data
+- No dummy values
+- No simulated forecasts
+
+All information displayed is actual, real-time air quality data.
+
 ## License
 
-This project is proprietary software. All rights reserved.
-
-For enterprise licensing inquiries, please contact your account representative.
-
-## Support
-
-**Enterprise Support:**
-For production deployments, dedicated support channels are available through your enterprise agreement.
-
-**Documentation:**
-Comprehensive API documentation available at `/docs` endpoint when backend is running.
-
-**Technical Support:**
-For technical issues, please contact the development team through your organization's designated support channel.
-
-## Version History
-
-**Version 1.0.0** (Current)
-- Initial production release
-- NASA TEMPO satellite integration
-- OpenAQ ground sensor network integration
-- 3D Cesium globe visualization
-- 24-hour forecasting capability
-- Historical data access (2-year range)
-- Timezone-aware date handling
-- Responsive mobile design
+MIT License - See LICENSE file for details
 
 ## Authors
 
-Developed by Atharv and Pragati
+**Developed by Atharv and Pragati**
+
+Built with dedication for environmental awareness and public health.
+
+## Acknowledgments
+
+- **NASA TEMPO** - For providing cutting-edge satellite air quality data
+- **OpenAQ** - For maintaining the world's largest open air quality database
+- **NOAA** - For comprehensive meteorological data
+- **Cesium** - For the powerful 3D geospatial visualization engine
 
 ---
 
-**For Enterprise Deployments:** Contact your solutions architect for customization, white-labeling, and integration support.
+**Hackathon Project** | Built to demonstrate real-world application of multi-source environmental data fusion
