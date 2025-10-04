@@ -66,7 +66,6 @@ export function GoogleMap({
       const map = new google.maps.Map(mapRef.current, mapOptions)
       mapInstanceRef.current = map
 
-      // Add click listener
       map.addListener('click', (event: google.maps.MapMouseEvent) => {
         if (event.latLng && onLocationSelect) {
           const lat = event.latLng.lat()
@@ -82,22 +81,18 @@ export function GoogleMap({
     }
   }, [selectedLocation, mapType, onLocationSelect])
 
-  // Update map type when prop changes
   useEffect(() => {
     if (mapInstanceRef.current && mapType) {
       mapInstanceRef.current.setMapTypeId(mapType as google.maps.MapTypeId)
     }
   }, [mapType])
 
-  // Update marker when selected location changes
   useEffect(() => {
     if (mapInstanceRef.current && selectedLocation) {
-      // Remove existing marker
       if (markerRef.current) {
         markerRef.current.setMap(null)
       }
 
-      // Add new marker
       const marker = new google.maps.Marker({
         position: { lat: selectedLocation.lat, lng: selectedLocation.lon },
         map: mapInstanceRef.current,
@@ -116,7 +111,6 @@ export function GoogleMap({
 
       markerRef.current = marker
 
-      // Center map on marker
       mapInstanceRef.current.setCenter({ lat: selectedLocation.lat, lng: selectedLocation.lon })
     }
   }, [selectedLocation])
@@ -143,7 +137,6 @@ export function GoogleMap({
 
   return (
     <div className="relative">
-      {/* Map Type Selector */}
       {onMapTypeChange && (
         <div className="absolute top-4 right-4 z-10 flex bg-white dark:bg-black rounded-2xl p-1 shadow-lg border border-gray-200 dark:border-gray-600">
           <button
@@ -179,7 +172,6 @@ export function GoogleMap({
         </div>
       )}
 
-      {/* Maximize Button */}
       {onToggleMaximize && (
         <button
           onClick={onToggleMaximize}

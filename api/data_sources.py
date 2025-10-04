@@ -2,6 +2,7 @@
 Real-time air quality data integration from multiple sources:
 - NASA TEMPO satellite data
 - OpenAQ ground-based sensors
+- AirNow.gov (EPA) ground-based sensors
 - Weather data integration
 """
 
@@ -18,6 +19,8 @@ import json
 NASA_TEMPO_TOKEN = os.getenv("NASA_TEMPO_TOKEN")
 OPENAQ_BASE_URL = os.getenv("OPENAQ_BASE_URL", "https://api.openaq.org/v2/")
 OPENAQ_API_KEY = os.getenv("OPENAQ_API_KEY")
+AIRNOW_API_KEY = os.getenv("AIRNOW_API_KEY", "3B89892A-AD2E-4D90-BD75-8659EE760528")
+AIRNOW_BASE_URL = os.getenv("AIRNOW_BASE_URL", "https://www.airnowapi.org/aq/")
 WAQI_API_KEY = os.getenv("WAQI_API_KEY")
 WAQI_BASE_URL = os.getenv("WAQI_BASE_URL", "https://api.waqi.info/")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
@@ -409,9 +412,580 @@ class WeatherDataSource(DataSource):
         else:
             return "moderate"
 
+class AirNowDataSource(DataSource):
+    """AirNow.gov EPA Air Quality Data"""
+
+    def __init__(self):
+        super().__init__("AirNow", 2, "United States")
+
+    async def get_airnow_data(self, lat: float, lon: float) -> Optional[Dict]:
+        """Fetch air quality data from AirNow.gov API"""
+        if not AIRNOW_API_KEY:
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Get current observation by lat/lon
+                response = await client.get(
+                    f"{AIRNOW_BASE_URL}observation/latLong/current/",
+                    params={
+                        "format": "application/json",
+                        "latitude": lat,
+                        "longitude": lon,
+                        "distance": 50,  # Search radius in miles
+                        "API_KEY": AIRNOW_API_KEY
+                    }
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        self.last_successful_call = datetime.utcnow()
+                        self.error_count = 0
+                        return self._process_airnow_data(data, lat, lon)
+
+                # If no current data, try forecast endpoint
+                forecast_response = await client.get(
+                    f"{AIRNOW_BASE_URL}forecast/latLong/",
+                    params={
+                        "format": "application/json",
+                        "latitude": lat,
+                        "longitude": lon,
+                        "distance": 50,
+                        "date": datetime.utcnow().strftime("%Y-%m-%d"),
+                        "API_KEY": AIRNOW_API_KEY
+                    }
+                )
+
+                if forecast_response.status_code == 200:
+                    forecast_data = forecast_response.json()
+                    if forecast_data:
+                        self.last_successful_call = datetime.utcnow()
+                        self.error_count = 0
+                        return self._process_airnow_forecast(forecast_data, lat, lon)
+
+        except Exception as e:
+            print(f"AirNow API error: {e}")
+            self.error_count += 1
+
+        return None
+
+    def _process_airnow_data(self, data: List[Dict], lat: float, lon: float) -> Dict:
+        """Process AirNow observation data into standardized format"""
+        if not data:
+            return None
+
+        pollutants = {}
+        station_name = None
+
+        # Process each observation (typically one per pollutant)
+        for observation in data:
+            param = observation.get("ParameterName", "").lower()
+            aqi = observation.get("AQI")
+            category = observation.get("Category", {})
+
+            if not station_name:
+                station_name = observation.get("ReportingArea", "Unknown Station")
+
+            # Map AirNow parameter names to standard codes
+            param_mapping = {
+                "pm2.5": "pm25",
+                "pm10": "pm10",
+                "o3": "o3",
+                "ozone": "o3",
+                "no2": "no2",
+                "co": "co",
+                "so2": "so2"
+            }
+
+            param_code = param_mapping.get(param)
+            if param_code and aqi is not None:
+                pollutants[param_code] = {
+                    "aqi": aqi,
+                    "category": category.get("Name", "Unknown"),
+                    "category_number": category.get("Number", 0),
+                    "unit": "AQI",
+                    "last_updated": observation.get("DateObserved", "") + "T" + observation.get("HourObserved", "00") + ":00:00",
+                    "source": "AirNow EPA"
+                }
+
+        # Calculate overall AQI (maximum of all pollutants)
+        overall_aqi = max([p["aqi"] for p in pollutants.values()]) if pollutants else None
+
+        return {
+            "source": "AirNow (EPA)",
+            "type": "ground_sensors",
+            "timestamp": datetime.utcnow().isoformat(),
+            "location": {"lat": lat, "lon": lon},
+            "station_info": {
+                "name": station_name,
+                "reporting_area": data[0].get("ReportingArea") if data else "Unknown"
+            },
+            "overall_aqi": overall_aqi,
+            "pollutants": pollutants,
+            "data_quality": "high",
+            "coverage": "United States"
+        }
+
+    def _process_airnow_forecast(self, data: List[Dict], lat: float, lon: float) -> Dict:
+        """Process AirNow forecast data into standardized format"""
+        if not data:
+            return None
+
+        # Use today's forecast
+        today_forecast = data[0] if data else {}
+        aqi = today_forecast.get("AQI")
+        category = today_forecast.get("Category", {})
+
+        return {
+            "source": "AirNow (EPA Forecast)",
+            "type": "ground_sensors",
+            "timestamp": datetime.utcnow().isoformat(),
+            "location": {"lat": lat, "lon": lon},
+            "station_info": {
+                "name": today_forecast.get("ReportingArea", "Unknown"),
+                "reporting_area": today_forecast.get("ReportingArea")
+            },
+            "overall_aqi": aqi,
+            "pollutants": {
+                "overall": {
+                    "aqi": aqi,
+                    "category": category.get("Name", "Unknown"),
+                    "category_number": category.get("Number", 0),
+                    "unit": "AQI",
+                    "source": "AirNow EPA Forecast"
+                }
+            },
+            "forecast_date": today_forecast.get("DateForecast"),
+            "data_quality": "medium",
+            "coverage": "United States"
+        }
+
+    async def get_forecast_by_zipcode(self, zipcode: str, date: Optional[str] = None, distance: int = 25) -> Optional[Dict]:
+        """Fetch air quality forecast from AirNow by ZIP code"""
+        if not AIRNOW_API_KEY:
+            return None
+
+        try:
+            params = {
+                "format": "application/json",
+                "zipCode": zipcode,
+                "distance": distance,
+                "API_KEY": AIRNOW_API_KEY
+            }
+
+            if date:
+                params["date"] = date
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{AIRNOW_BASE_URL}forecast/zipCode/",
+                    params=params
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        self.last_successful_call = datetime.utcnow()
+                        self.error_count = 0
+                        return self._process_zipcode_forecast(data, zipcode)
+
+        except Exception as e:
+            print(f"AirNow ZIP code forecast error: {e}")
+            self.error_count += 1
+
+        return None
+
+    def _process_zipcode_forecast(self, data: List[Dict], zipcode: str) -> Dict:
+        """Process AirNow ZIP code forecast data into structured format"""
+        if not data:
+            return None
+
+        # Group forecasts by pollutant
+        forecasts_by_pollutant = {}
+        location_info = None
+        discussion = None
+
+        for forecast in data:
+            param = forecast.get("ParameterName", "").lower()
+
+            # Store location info from first entry
+            if not location_info:
+                location_info = {
+                    "zipcode": zipcode,
+                    "reporting_area": forecast.get("ReportingArea"),
+                    "state_code": forecast.get("StateCode"),
+                    "lat": forecast.get("Latitude"),
+                    "lon": forecast.get("Longitude")
+                }
+
+            # Store discussion if available
+            if forecast.get("Discussion") and not discussion:
+                discussion = forecast.get("Discussion")
+
+            # Map parameter names
+            param_mapping = {
+                "pm2.5": "pm25",
+                "pm10": "pm10",
+                "o3": "o3",
+                "ozone": "o3"
+            }
+
+            param_code = param_mapping.get(param, param)
+            category = forecast.get("Category", {})
+
+            forecasts_by_pollutant[param_code] = {
+                "parameter": forecast.get("ParameterName"),
+                "aqi": forecast.get("AQI"),
+                "category": category.get("Name", "Unknown"),
+                "category_number": category.get("Number", 0),
+                "action_day": forecast.get("ActionDay", False),
+                "date_issue": forecast.get("DateIssue"),
+                "date_forecast": forecast.get("DateForecast")
+            }
+
+        # Calculate overall AQI (max of all pollutants)
+        overall_aqi = max([f["aqi"] for f in forecasts_by_pollutant.values() if f.get("aqi")]) if forecasts_by_pollutant else None
+
+        # Find the primary pollutant (one with highest AQI)
+        primary_pollutant = None
+        if forecasts_by_pollutant:
+            primary_pollutant = max(forecasts_by_pollutant.items(), key=lambda x: x[1].get("aqi", 0))[0]
+
+        return {
+            "source": "AirNow (EPA ZIP Code Forecast)",
+            "type": "forecast",
+            "timestamp": datetime.utcnow().isoformat(),
+            "location": location_info,
+            "overall_aqi": overall_aqi,
+            "primary_pollutant": primary_pollutant,
+            "forecasts": forecasts_by_pollutant,
+            "discussion": discussion,
+            "has_action_day": any(f.get("action_day", False) for f in forecasts_by_pollutant.values()),
+            "data_quality": "high",
+            "coverage": "United States"
+        }
+
+    async def get_monitoring_site_observations(
+        self,
+        bbox: str,
+        parameters: str = "ozone,pm25,pm10,co,no2,so2",
+        startdate: Optional[str] = None,
+        enddate: Optional[str] = None,
+        datatype: str = "B",
+        monitortype: Optional[int] = None,
+        verbose: bool = True,
+        include_raw_concentrations: bool = True
+    ) -> Optional[Dict]:
+        """Fetch detailed observations from AirNow monitoring sites by bounding box
+
+        Args:
+            bbox: Bounding box as "minX,minY,maxX,maxY" (e.g., "-90.806,24.634,-71.119,45.910")
+            parameters: Comma-separated list of pollutants (ozone,pm25,pm10,co,no2,so2)
+            startdate: Start date in UTC format "yyyy-MM-ddTHH:mm" (optional, defaults to last hour)
+            enddate: End date in UTC format "yyyy-MM-ddTHH:mm" (optional, defaults to last hour)
+            datatype: A=AQI, C=Concentration, B=Both (default: B)
+            monitortype: 0=Permanent, 1=Mobile, 2=Both (optional)
+            verbose: Include site metadata (Site Name, Agency, AQS ID)
+            include_raw_concentrations: Include raw concentration data
+        """
+        if not AIRNOW_API_KEY:
+            return None
+
+        try:
+            params = {
+                "format": "application/json",
+                "bbox": bbox,
+                "parameters": parameters,
+                "datatype": datatype,
+                "API_KEY": AIRNOW_API_KEY
+            }
+
+            if startdate:
+                params["startdate"] = startdate
+            if enddate:
+                params["enddate"] = enddate
+            if monitortype is not None:
+                params["monitortype"] = monitortype
+            if verbose:
+                params["verbose"] = 1
+            if include_raw_concentrations:
+                params["includerawconcentrations"] = 1
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{AIRNOW_BASE_URL}data/",
+                    params=params
+                )
+
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if data and isinstance(data, list):
+                            self.last_successful_call = datetime.utcnow()
+                            self.error_count = 0
+                            return self._process_monitoring_site_observations(data, bbox, parameters)
+                        else:
+                            print(f"AirNow: Unexpected response format: {type(data)}, content: {data}")
+                            return None
+                    except Exception as json_error:
+                        print(f"AirNow: JSON parsing error: {json_error}, response text: {response.text[:200]}")
+                        return None
+                else:
+                    print(f"AirNow: HTTP {response.status_code}, response: {response.text[:200]}")
+
+        except Exception as e:
+            print(f"AirNow monitoring site observations error: {e}")
+            self.error_count += 1
+
+        return None
+
+    async def get_historical_observations_by_zipcode(
+        self,
+        zipcode: str,
+        date: str,
+        distance: int = 25
+    ) -> Optional[Dict]:
+        """Fetch historical observations from AirNow by ZIP code for a specific date
+
+        Args:
+            zipcode: 5-digit US ZIP code
+            date: Date in format 'yyyy-mm-dd' (e.g., '2025-10-03')
+            distance: Search radius in miles (default: 25)
+        """
+        if not AIRNOW_API_KEY:
+            return None
+
+        try:
+            params = {
+                "format": "application/json",
+                "zipCode": zipcode,
+                "date": date,
+                "distance": distance,
+                "API_KEY": AIRNOW_API_KEY
+            }
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(
+                    f"{AIRNOW_BASE_URL}observation/zipCode/historical/",
+                    params=params
+                )
+
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if data and isinstance(data, list):
+                            self.last_successful_call = datetime.utcnow()
+                            self.error_count = 0
+                            return self._process_historical_observations(data, zipcode, date)
+                        else:
+                            print(f"AirNow historical: No data for {zipcode} on {date}")
+                            return None
+                    except Exception as json_error:
+                        print(f"AirNow historical: JSON parsing error: {json_error}")
+                        return None
+                else:
+                    print(f"AirNow historical: HTTP {response.status_code}")
+
+        except Exception as e:
+            print(f"AirNow historical observations error: {e}")
+            self.error_count += 1
+
+        return None
+
+    def _process_historical_observations(self, data: List[Dict], zipcode: str, date: str) -> Dict:
+        """Process AirNow historical observation data into structured format"""
+        if not data:
+            return None
+
+        # Group observations by hour and parameter
+        hourly_data = {}
+        location_info = None
+        reporting_area = None
+
+        for obs in data:
+            hour = obs.get("HourObserved", 0)
+            param = obs.get("ParameterName", "").lower()
+
+            # Extract location info from first observation
+            if not location_info:
+                location_info = {
+                    "zipcode": zipcode,
+                    "reporting_area": obs.get("ReportingArea"),
+                    "state_code": obs.get("StateCode"),
+                    "lat": obs.get("Latitude"),
+                    "lon": obs.get("Longitude"),
+                    "timezone": obs.get("LocalTimeZone")
+                }
+                reporting_area = obs.get("ReportingArea")
+
+            # Create hourly bucket
+            if hour not in hourly_data:
+                hourly_data[hour] = {
+                    "hour": hour,
+                    "date_observed": obs.get("DateObserved"),
+                    "pollutants": {},
+                    "overall_aqi": None
+                }
+
+            # Map parameter names
+            param_mapping = {
+                "pm2.5": "pm25",
+                "pm10": "pm10",
+                "o3": "o3",
+                "ozone": "o3",
+                "no2": "no2",
+                "co": "co",
+                "so2": "so2"
+            }
+
+            param_code = param_mapping.get(param, param)
+
+            hourly_data[hour]["pollutants"][param_code] = {
+                "parameter": obs.get("ParameterName"),
+                "aqi": obs.get("AQI"),
+                "category": obs.get("CategoryName"),
+                "category_number": obs.get("CategoryNumber")
+            }
+
+        # Calculate overall AQI for each hour (max of all pollutants)
+        for hour, hour_data in hourly_data.items():
+            aqi_values = [p["aqi"] for p in hour_data["pollutants"].values() if p.get("aqi") is not None]
+            if aqi_values:
+                hour_data["overall_aqi"] = max(aqi_values)
+
+        # Calculate daily statistics
+        all_aqi_values = [h["overall_aqi"] for h in hourly_data.values() if h.get("overall_aqi") is not None]
+
+        daily_stats = {
+            "avg_aqi": round(sum(all_aqi_values) / len(all_aqi_values), 1) if all_aqi_values else None,
+            "max_aqi": max(all_aqi_values) if all_aqi_values else None,
+            "min_aqi": min(all_aqi_values) if all_aqi_values else None,
+            "observations_count": len(hourly_data)
+        }
+
+        # Sort hourly data by hour
+        sorted_hourly = sorted(hourly_data.values(), key=lambda x: x["hour"])
+
+        return {
+            "source": "AirNow (EPA Historical Observations)",
+            "type": "historical_observations",
+            "timestamp": datetime.utcnow().isoformat(),
+            "date": date,
+            "location": location_info,
+            "reporting_area": reporting_area,
+            "hourly_observations": sorted_hourly,
+            "daily_statistics": daily_stats,
+            "data_quality": "high",
+            "coverage": "United States"
+        }
+
+    def _process_monitoring_site_observations(self, data: List[Dict], bbox: str, parameters: str) -> Dict:
+        """Process AirNow monitoring site observation data into structured format"""
+        if not data:
+            return {
+                "source": "AirNow (EPA Monitoring Sites)",
+                "type": "observations",
+                "timestamp": datetime.utcnow().isoformat(),
+                "bbox": bbox,
+                "parameters": parameters.split(","),
+                "total_observations": 0,
+                "sites": [],
+                "observations": []
+            }
+
+        # Group observations by site
+        sites_dict = {}
+        all_observations = []
+
+        for obs in data:
+            site_key = f"{obs.get('Latitude', 0)},{obs.get('Longitude', 0)}"
+
+            # Extract site info
+            if site_key not in sites_dict:
+                sites_dict[site_key] = {
+                    "latitude": obs.get("Latitude"),
+                    "longitude": obs.get("Longitude"),
+                    "site_name": obs.get("SiteName", "Unknown Site"),
+                    "agency": obs.get("AgencyName", "Unknown Agency"),
+                    "aqs_id": obs.get("AQSCode", ""),
+                    "full_aqs_id": obs.get("FullAQSCode", ""),
+                    "observations_count": 0
+                }
+
+            sites_dict[site_key]["observations_count"] += 1
+
+            # Process observation
+            # Category can be either an integer (category number) or a dict with Name/Number
+            category_value = obs.get("Category")
+            if isinstance(category_value, dict):
+                category_name = category_value.get("Name")
+                category_number = category_value.get("Number")
+            elif isinstance(category_value, int):
+                category_number = category_value
+                # Map category numbers to names
+                category_map = {1: "Good", 2: "Moderate", 3: "Unhealthy for Sensitive Groups",
+                               4: "Unhealthy", 5: "Very Unhealthy", 6: "Hazardous"}
+                category_name = category_map.get(category_number, "Unknown")
+            else:
+                category_name = None
+                category_number = None
+
+            processed_obs = {
+                "site_key": site_key,
+                "latitude": obs.get("Latitude"),
+                "longitude": obs.get("Longitude"),
+                "utc_datetime": obs.get("UTC"),
+                "parameter": obs.get("Parameter", "").lower(),
+                "unit": obs.get("Unit", ""),
+                "value": obs.get("Value"),
+                "raw_concentration": obs.get("RawConcentration"),
+                "aqi": obs.get("AQI"),
+                "category": category_name,
+                "category_number": category_number,
+                "site_name": obs.get("SiteName"),
+                "agency": obs.get("AgencyName")
+            }
+
+            all_observations.append(processed_obs)
+
+        # Calculate summary statistics
+        param_stats = {}
+        for param in parameters.split(","):
+            param_obs = [o for o in all_observations if o["parameter"] == param.lower().strip()]
+            if param_obs:
+                aqi_values = [o["aqi"] for o in param_obs if o.get("aqi") is not None]
+                conc_values = [o["raw_concentration"] for o in param_obs if o.get("raw_concentration") is not None]
+
+                param_stats[param] = {
+                    "observation_count": len(param_obs),
+                    "avg_aqi": round(sum(aqi_values) / len(aqi_values), 1) if aqi_values else None,
+                    "max_aqi": max(aqi_values) if aqi_values else None,
+                    "min_aqi": min(aqi_values) if aqi_values else None,
+                    "avg_concentration": round(sum(conc_values) / len(conc_values), 2) if conc_values else None,
+                    "max_concentration": max(conc_values) if conc_values else None,
+                    "min_concentration": min(conc_values) if conc_values else None,
+                    "unit": param_obs[0].get("unit") if param_obs else None
+                }
+
+        return {
+            "source": "AirNow (EPA Monitoring Sites)",
+            "type": "observations",
+            "timestamp": datetime.utcnow().isoformat(),
+            "bbox": bbox,
+            "parameters": parameters.split(","),
+            "total_sites": len(sites_dict),
+            "total_observations": len(all_observations),
+            "sites": list(sites_dict.values()),
+            "parameter_statistics": param_stats,
+            "observations": all_observations,
+            "data_quality": "high",
+            "coverage": "United States"
+        }
+
 class AQICNDataSource(DataSource):
     """AQICN (Air Quality Index China Network) / World Air Quality Index Data"""
-    
+
     def __init__(self):
         super().__init__("AQICN", 3, "Global")
         
@@ -515,90 +1089,101 @@ class AQICNDataSource(DataSource):
 
 class DataFusionEngine:
     """Combine data from multiple sources into unified air quality metrics"""
-    
+
     def __init__(self):
         self.tempo_source = TempoDataSource()
         self.openaq_source = OpenAQDataSource()
+        self.airnow_source = AirNowDataSource()
         self.aqicn_source = AQICNDataSource()
         self.weather_source = WeatherDataSource()
         
     async def get_comprehensive_air_quality(self, lat: float, lon: float) -> Dict:
         """Fetch and combine data from all sources with enhanced error handling"""
         errors = {}
-        
+
         # Fetch data from all sources concurrently
         tasks = [
             self.tempo_source.get_satellite_data(lat, lon),
             self.openaq_source.get_ground_data(lat, lon),
+            self.airnow_source.get_airnow_data(lat, lon),
             self.aqicn_source.get_aqicn_data(lat, lon),
             self.weather_source.get_weather_data(lat, lon)
         ]
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Enhanced exception handling with detailed logging
         tempo_data = results[0] if not isinstance(results[0], Exception) else None
         openaq_data = results[1] if not isinstance(results[1], Exception) else None
-        aqicn_data = results[2] if not isinstance(results[2], Exception) else None
-        weather_data = results[3] if not isinstance(results[3], Exception) else None
-        
+        airnow_data = results[2] if not isinstance(results[2], Exception) else None
+        aqicn_data = results[3] if not isinstance(results[3], Exception) else None
+        weather_data = results[4] if not isinstance(results[4], Exception) else None
+
         # Log any data source failures
         if isinstance(results[0], Exception):
             errors["tempo"] = str(results[0])
             print(f"TEMPO data source failed: {results[0]}")
-            
+
         if isinstance(results[1], Exception):
             errors["openaq"] = str(results[1])
             print(f"OpenAQ data source failed: {results[1]}")
-            
+
         if isinstance(results[2], Exception):
-            errors["aqicn"] = str(results[2])
-            print(f"AQICN data source failed: {results[2]}")
-            
+            errors["airnow"] = str(results[2])
+            print(f"AirNow data source failed: {results[2]}")
+
         if isinstance(results[3], Exception):
-            errors["weather"] = str(results[3])
-            print(f"Weather data source failed: {results[3]}")
-        
+            errors["aqicn"] = str(results[3])
+            print(f"AQICN data source failed: {results[3]}")
+
+        if isinstance(results[4], Exception):
+            errors["weather"] = str(results[4])
+            print(f"Weather data source failed: {results[4]}")
+
         # Ensure we always have at least one data source
-        if not any([tempo_data, openaq_data, aqicn_data, weather_data]):
+        if not any([tempo_data, openaq_data, airnow_data, aqicn_data, weather_data]):
             print(f"All data sources failed for location {lat}, {lon}. Using fallback data.")
             # Generate robust fallback data
             openaq_data = self._generate_emergency_fallback_data(lat, lon)
-        
+
         # Combine and analyze data
-        combined_data = self._fuse_data_sources(tempo_data, openaq_data, aqicn_data, weather_data, lat, lon)
-        
+        combined_data = self._fuse_data_sources(tempo_data, openaq_data, airnow_data, aqicn_data, weather_data, lat, lon)
+
         # Add error information to result
         if errors:
             combined_data["data_source_errors"] = errors
-            
+
         return combined_data
     
-    def _fuse_data_sources(self, tempo_data: Optional[Dict], openaq_data: Optional[Dict], 
-                          aqicn_data: Optional[Dict], weather_data: Optional[Dict], lat: float, lon: float) -> Dict:
+    def _fuse_data_sources(self, tempo_data: Optional[Dict], openaq_data: Optional[Dict],
+                          airnow_data: Optional[Dict], aqicn_data: Optional[Dict],
+                          weather_data: Optional[Dict], lat: float, lon: float) -> Dict:
         """Fuse data from multiple sources into unified metrics"""
-        
+
         result = {
             "timestamp": datetime.utcnow().isoformat(),
             "location": {"lat": lat, "lon": lon},
             "data_sources": {
                 "satellite": tempo_data is not None,
-                "ground_sensors": openaq_data is not None or aqicn_data is not None,
+                "ground_sensors": openaq_data is not None or airnow_data is not None or aqicn_data is not None,
+                "airnow": airnow_data is not None,
                 "aqicn": aqicn_data is not None,
+                "openaq": openaq_data is not None,
                 "weather": weather_data is not None
             },
-            "data_quality": "high" if all([tempo_data, openaq_data or aqicn_data, weather_data]) else "medium",
+            "data_quality": "high" if all([tempo_data, (openaq_data or airnow_data or aqicn_data), weather_data]) else "medium",
             "raw_data": {
                 "tempo": tempo_data,
                 "openaq": openaq_data,
+                "airnow": airnow_data,
                 "aqicn": aqicn_data,
                 "weather": weather_data
             }
         }
-        
+
         # Calculate primary AQI from available ground sensor data
-        # Prefer AQICN if available, fallback to OpenAQ
-        primary_aqi = self._calculate_primary_aqi(aqicn_data or openaq_data)
+        # Priority: AirNow (EPA) > AQICN > OpenAQ
+        primary_aqi = self._calculate_primary_aqi(airnow_data or aqicn_data or openaq_data)
         
         # Enhance with satellite data
         enhanced_metrics = self._enhance_with_satellite_data(primary_aqi, tempo_data)
@@ -611,11 +1196,23 @@ class DataFusionEngine:
         return result
     
     def _calculate_primary_aqi(self, sensor_data: Optional[Dict]) -> Dict:
-        """Calculate AQI from ground sensor data (OpenAQ or AQICN)"""
+        """Calculate AQI from ground sensor data (AirNow, OpenAQ or AQICN)"""
         if not sensor_data:
             # Fallback to mock data if no ground sensors available
             return self._generate_fallback_aqi()
-        
+
+        # Handle AirNow data format (highest priority)
+        if "AirNow" in sensor_data.get("source", ""):
+            overall_aqi = sensor_data.get("overall_aqi")
+            if overall_aqi:
+                return {
+                    "overall_aqi": overall_aqi,
+                    "pollutants": sensor_data.get("pollutants", {}),
+                    "primary_source": "airnow_epa",
+                    "confidence": "high",
+                    "station_info": sensor_data.get("station_info", {})
+                }
+
         # Handle AQICN data format
         if sensor_data.get("source") == "AQICN (World Air Quality Index)":
             overall_aqi = sensor_data.get("overall_aqi")

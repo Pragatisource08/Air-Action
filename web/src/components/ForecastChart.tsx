@@ -1,6 +1,6 @@
 'use client'
 
-import { Line, Area, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { Line, Area, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts'
 import { formatForChart, getUserTimezone, getTimezoneAbbreviation } from '@/utils/timezone'
 
 interface ForecastData {
@@ -11,14 +11,35 @@ interface ForecastData {
   aqi_upper: number
   pm25: number
   category: string
+  data_type?: string
+  confidence?: string
 }
+
+const AQI_COLORS = {
+  good: '#00e400',
+  moderate: '#ffd700',
+  unhealthySG: '#ff7e00',
+  unhealthy: '#ff0000',
+  veryUnhealthy: '#8f3f97',
+  hazardous: '#7e0023'
+}
+
+const AQI_BREAKPOINTS = [
+  { value: 50, color: AQI_COLORS.good, label: 'Good' },
+  { value: 100, color: AQI_COLORS.moderate, label: 'Moderate' },
+  { value: 150, color: AQI_COLORS.unhealthySG, label: 'Unhealthy for Sensitive Groups' },
+  { value: 200, color: AQI_COLORS.unhealthy, label: 'Unhealthy' },
+  { value: 300, color: AQI_COLORS.veryUnhealthy, label: 'Very Unhealthy' }
+]
 
 interface ForecastChartProps {
   data: ForecastData[]
   height?: number
+  isHistorical?: boolean
+  isFuture?: boolean
 }
 
-export function ForecastChart({ data, height = 300 }: ForecastChartProps) {
+export function ForecastChart({ data, height = 400, isHistorical = false, isFuture = false }: ForecastChartProps) {
   if (!data || data.length === 0) {
     return (
       <div className="w-full h-64 flex items-center justify-center bg-gray-50 rounded-lg">
@@ -30,120 +51,248 @@ export function ForecastChart({ data, height = 300 }: ForecastChartProps) {
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
     const userTimezone = getUserTimezone()
-    return date.toLocaleTimeString('en-US', { 
+    return date.toLocaleTimeString('en-US', {
       timeZone: userTimezone,
-      hour: 'numeric', 
-      hour12: true 
+      hour: 'numeric',
+      hour12: true
     })
   }
 
+  const getChartTitle = () => {
+    if (isHistorical) return "24-Hour Historical AQI Data"
+    if (isFuture) return "24-Hour AQI Prediction"
+    return "24-Hour Air Quality Forecast"
+  }
+
+  const getSubtitle = () => {
+    if (isHistorical) return "Based on historical patterns and seasonal trends 📊"
+    if (isFuture) return "Predictive model with increased uncertainty 🔮"
+    return "Real-time satellite data with ML-powered forecasting ✨"
+  }
+
+  const getIcon = () => {
+    if (isHistorical) return "📅"
+    if (isFuture) return "🔮"
+    return "📈"
+  }
+
+  const getAQIColor = (aqi: number) => {
+    if (aqi <= 50) return AQI_COLORS.good
+    if (aqi <= 100) return AQI_COLORS.moderate
+    if (aqi <= 150) return AQI_COLORS.unhealthySG
+    if (aqi <= 200) return AQI_COLORS.unhealthy
+    if (aqi <= 300) return AQI_COLORS.veryUnhealthy
+    return AQI_COLORS.hazardous
+  }
+
+  const avgAQI = data.reduce((sum, point) => sum + point.aqi, 0) / data.length
+  const primaryColor = getAQIColor(avgAQI)
+  const maxAQI = Math.max(...data.map(d => Math.max(d.aqi, d.aqi_upper)))
+  const chartMaxY = Math.min(500, Math.max(200, maxAQI + 50))
 
   return (
     <div className="w-full">
       <div className="mb-6">
         <div className="flex items-center space-x-2 mb-2">
-          <span className="text-2xl">📈</span>
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white">24-Hour Air Quality Forecast</h3>
+          <span className="text-2xl">{getIcon()}</span>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white">{getChartTitle()}</h3>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400">AQI values with uncertainty bands ✨</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{getSubtitle()}</p>
       </div>
-      
+
       <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-gray-300 dark:text-gray-600" />
-          <XAxis 
+        <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+          <ReferenceArea y1={0} y2={50} fill={AQI_COLORS.good} fillOpacity={0.03} />
+          <ReferenceArea y1={50} y2={100} fill={AQI_COLORS.moderate} fillOpacity={0.03} />
+          <ReferenceArea y1={100} y2={150} fill={AQI_COLORS.unhealthySG} fillOpacity={0.03} />
+          <ReferenceArea y1={150} y2={chartMaxY} fill={AQI_COLORS.unhealthy} fillOpacity={0.03} />
+
+          <ReferenceLine y={50} stroke={AQI_COLORS.good} strokeWidth={1} strokeOpacity={0.3} strokeDasharray="3 3" />
+          <ReferenceLine y={100} stroke={AQI_COLORS.moderate} strokeWidth={1} strokeOpacity={0.3} strokeDasharray="3 3" />
+          <ReferenceLine y={150} stroke={AQI_COLORS.unhealthySG} strokeWidth={1} strokeOpacity={0.3} strokeDasharray="3 3" />
+
+          <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-gray-200 dark:text-gray-700" strokeOpacity={0.4} />
+
+          <XAxis
             dataKey="timestamp"
             tickFormatter={formatTime}
             stroke="currentColor"
-            fontSize={12}
-            className="text-gray-900 dark:text-gray-100"
+            fontSize={11}
+            className="text-gray-600 dark:text-gray-400"
+            interval={'preserveStartEnd'}
+            axisLine={false}
+            tickLine={false}
           />
-          <YAxis 
+
+          <YAxis
+            domain={[0, chartMaxY]}
             stroke="currentColor"
-            fontSize={12}
-            className="text-gray-900 dark:text-gray-100"
-            label={{ value: 'AQI', angle: -90, position: 'insideLeft' }}
+            fontSize={11}
+            className="text-gray-600 dark:text-gray-400"
+            label={{ value: 'AQI', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px' } }}
+            axisLine={false}
+            tickLine={false}
           />
-          <Tooltip 
+
+          <Tooltip
             formatter={(value: number, name: string) => {
-              if (name === 'aqi') return [value, 'AQI']
-              if (name === 'aqi_upper') return [value, 'Upper bound']
-              if (name === 'aqi_lower') return [value, 'Lower bound']
+              if (name === 'AQI Forecast') {
+                const category = value <= 50 ? 'Good' : value <= 100 ? 'Moderate' :
+                  value <= 150 ? 'Unhealthy for Sensitive Groups' : value <= 200 ? 'Unhealthy' :
+                  value <= 300 ? 'Very Unhealthy' : 'Hazardous'
+                return [value, `AQI (${category})`]
+              }
+              if (name === 'Upper bound') return [value, 'Upper Bound']
+              if (name === 'Lower bound') return [value, 'Lower Bound']
               return [value, name]
             }}
             labelFormatter={(timestamp: string) => {
               const userTimezone = getUserTimezone()
               const tzAbbr = getTimezoneAbbreviation(userTimezone)
-              return formatForChart(timestamp) + ` ${tzAbbr}`
+              const date = new Date(timestamp)
+              return date.toLocaleString('en-US', {
+                timeZone: userTimezone,
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              }) + ` ${tzAbbr}`
             }}
             contentStyle={{
-              backgroundColor: 'var(--tooltip-bg)',
-              border: '1px solid var(--tooltip-border)',
-              borderRadius: '6px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #d1d5db',
+              borderRadius: '12px',
               fontSize: '14px',
-              color: 'var(--tooltip-text)'
+              color: '#000000',
+              boxShadow: '0 8px 25px -5px rgba(0, 0, 0, 0.2)',
+              padding: '16px',
+              minWidth: '200px'
             }}
-            wrapperStyle={{
-              '--tooltip-bg': 'white',
-              '--tooltip-border': '#e5e7eb',
-              '--tooltip-text': 'black'
-            } as React.CSSProperties}
-            className="dark:[--tooltip-bg:theme(colors.gray.800)] dark:[--tooltip-border:theme(colors.gray.600)] dark:[--tooltip-text:white]"
+            cursor={{ stroke: primaryColor, strokeWidth: 1, strokeOpacity: 0.5 }}
           />
-          <Legend />
-          
-          {/* Uncertainty band */}
+
           <Area
             dataKey="aqi_upper"
             stroke="none"
-            fill="#3b82f6"
-            fillOpacity={0.1}
-            name="Uncertainty band"
+            fill={primaryColor}
+            fillOpacity={0.12}
+            connectNulls
           />
           <Area
             dataKey="aqi_lower"
             stroke="none"
-            fill="white"
-            fillOpacity={1}
+            fill="transparent"
+            fillOpacity={0}
+            connectNulls
           />
-          
-          {/* Main AQI line */}
+
+          <Line
+            type="monotone"
+            dataKey="aqi_upper"
+            stroke="#9ca3af"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+            dot={false}
+            strokeOpacity={0.7}
+            name="Upper bound"
+            connectNulls
+          />
+          <Line
+            type="monotone"
+            dataKey="aqi_lower"
+            stroke="#9ca3af"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+            dot={false}
+            strokeOpacity={0.7}
+            name="Lower bound"
+            connectNulls
+          />
+
           <Line
             type="monotone"
             dataKey="aqi"
-            stroke="#3b82f6"
+            stroke={primaryColor}
             strokeWidth={3}
-            dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+            strokeDasharray={isHistorical ? "6 3" : isFuture ? "9 4" : undefined}
+            dot={{ fill: primaryColor, strokeWidth: 2, r: 4, stroke: 'white' }}
+            activeDot={{ r: 6, fill: primaryColor, stroke: 'white', strokeWidth: 2 }}
             name="AQI Forecast"
-          />
-          
-          {/* Upper and lower bound lines */}
-          <Line
-            type="monotone"
-            dataKey="aqi_upper"
-            stroke="#94a3b8"
-            strokeWidth={1}
-            strokeDasharray="5 5"
-            dot={false}
-            name="Upper bound"
-          />
-          <Line
-            type="monotone"
-            dataKey="aqi_lower"
-            stroke="#94a3b8"
-            strokeWidth={1}
-            strokeDasharray="5 5"
-            dot={false}
-            name="Lower bound"
+            connectNulls
           />
         </ComposedChart>
       </ResponsiveContainer>
-      
-      <div className="mt-6 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-2xl">
-        <p className="text-xs text-gray-600 dark:text-gray-400 flex items-center">
-          <span className="mr-2">🤖</span>
-          Forecast uses persistence baseline model with ±20 AQI uncertainty bands
-        </p>
+
+      <div className="mt-6 p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-gray-200 dark:border-gray-600">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">EPA Air Quality Index Scale</h4>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {isHistorical ? "Historical Data" : isFuture ? "Predictive Model" : "Live Forecast"}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
+          {AQI_BREAKPOINTS.map((breakpoint, index) => {
+            const prevValue = index === 0 ? 0 : AQI_BREAKPOINTS[index - 1].value
+            return (
+              <div key={breakpoint.value} className="flex items-center space-x-2 text-xs">
+                <div
+                  className="w-3 h-3 rounded-full border border-gray-300"
+                  style={{ backgroundColor: breakpoint.color }}
+                />
+                <span className="text-gray-700 dark:text-gray-300 font-medium">
+                  {prevValue + 1}-{breakpoint.value}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+          <div className="flex items-center">
+            <span className="mr-2">🤖</span>
+            <span>NASA TEMPO satellite data + ground sensors + weather models</span>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-1 rounded" style={{ backgroundColor: primaryColor }}></div>
+              <span className="text-xs">AQI Forecast</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-2 rounded" style={{ backgroundColor: primaryColor, opacity: 0.15 }}></div>
+              <span className="text-xs">Uncertainty Range</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="text-lg font-bold text-gray-900 dark:text-white">
+            {Math.round(avgAQI)}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Avg AQI</div>
+        </div>
+        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="text-lg font-bold text-gray-900 dark:text-white">
+            {Math.max(...data.map(d => d.aqi))}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Peak AQI</div>
+        </div>
+        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="text-lg font-bold text-gray-900 dark:text-white">
+            {Math.min(...data.map(d => d.aqi))}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Best AQI</div>
+        </div>
+        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="text-xs font-bold text-center" style={{ color: getAQIColor(avgAQI) }}>
+            {avgAQI <= 50 ? 'Good' : avgAQI <= 100 ? 'Moderate' : avgAQI <= 150 ? 'Unhealthy' : avgAQI <= 200 ? 'Unhealthy' : 'Hazardous'}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Overall</div>
+        </div>
       </div>
     </div>
   )

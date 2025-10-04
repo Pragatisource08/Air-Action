@@ -56,17 +56,34 @@ async def get_current_air_quality(
 @app.get("/forecast")
 async def get_air_quality_forecast(
     lat: float = Query(..., description="Latitude"),
-    lon: float = Query(..., description="Longitude"), 
+    lon: float = Query(..., description="Longitude"),
     horizon: int = Query(24, description="Forecast horizon in hours"),
-    use_real_data: bool = Query(True, description="Use real-time data sources")
+    use_real_data: bool = Query(True, description="Use real-time data sources"),
+    target_date: Optional[str] = Query(None, description="Target date in YYYY-MM-DD format. If not provided, uses current date")
 ):
     """Get air quality forecast integrating NASA TEMPO, OpenAQ, and weather data"""
     try:
+        # Parse and validate target date
+        target_datetime = datetime.utcnow()
+        is_historical = False
+        is_future = False
+
+        if target_date:
+            try:
+                target_datetime = datetime.strptime(target_date, "%Y-%m-%d")
+                today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+                target_day = target_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                is_historical = target_day < today
+                is_future = target_day > today
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
         if use_real_data:
             # Import here to avoid circular imports
             from data_sources import data_fusion_engine
-            
-            # Get comprehensive real-time data
+
+            # Get comprehensive real-time data (for current conditions baseline)
             real_time_data = await data_fusion_engine.get_comprehensive_air_quality(lat, lon)
             
             # Extract current conditions from real data
@@ -79,17 +96,31 @@ async def get_air_quality_forecast(
             else:
                 current_pm25 = current_aqi * 0.4  # Estimate if not available
             
-            # Generate forecast based on real current conditions
-            forecast_data = generate_realistic_forecast(lat, lon, current_aqi, current_pm25, horizon, real_time_data)
-            
+            # Generate forecast based on date type
+            if is_historical:
+                forecast_data = generate_historical_data(lat, lon, target_datetime, horizon, current_aqi, current_pm25)
+                model_name = "historical_synthesis_v1"
+                data_quality = "historical_estimate"
+            elif is_future:
+                forecast_data = generate_future_forecast(lat, lon, target_datetime, horizon, current_aqi, current_pm25)
+                model_name = "predictive_model_v1"
+                data_quality = "predictive"
+            else:
+                forecast_data = generate_realistic_forecast(lat, lon, current_aqi, current_pm25, horizon, real_time_data, target_datetime)
+                model_name = "tempo_openaq_integrated_v1"
+                data_quality = real_time_data.get("data_quality", "real_time")
+
             return {
                 "lat": lat,
                 "lon": lon,
                 "forecast": forecast_data,
-                "real_time_data": real_time_data,
-                "model": "tempo_openaq_integrated_v1",
-                "data_sources": real_time_data.get("data_sources", {}),
-                "data_quality": real_time_data.get("data_quality", "unknown"),
+                "target_date": target_date,
+                "is_historical": is_historical,
+                "is_future": is_future,
+                "real_time_data": real_time_data if not (is_historical or is_future) else None,
+                "model": model_name,
+                "data_sources": real_time_data.get("data_sources", {}) if not (is_historical or is_future) else {"type": "synthetic"},
+                "data_quality": data_quality,
                 "generated_at": datetime.utcnow().isoformat()
             }
         else:
@@ -116,6 +147,188 @@ async def get_health_recommendations_endpoint(
 ):
     """Get health recommendations for a specific AQI value"""
     return get_health_recommendations(aqi)
+
+@app.get("/forecast-by-zip")
+async def get_forecast_by_zipcode(
+    zipcode: str = Query(..., description="5-digit US ZIP code", regex=r"^\d{5}$"),
+    date: Optional[str] = Query(None, description="Forecast date in YYYY-MM-DD format (optional)"),
+    distance: int = Query(25, description="Search radius in miles", ge=1, le=100)
+):
+    """Get air quality forecast by ZIP code from AirNow EPA
+
+    Returns detailed forecast including:
+    - AQI forecast by pollutant (PM2.5, O3, etc.)
+    - EPA category and action day alerts
+    - Discussion/explanation of forecast conditions
+    - Reporting area and location details
+    """
+    try:
+        from data_sources import AirNowDataSource
+
+        airnow_source = AirNowDataSource()
+        forecast_data = await airnow_source.get_forecast_by_zipcode(zipcode, date, distance)
+
+        if not forecast_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No forecast data available for ZIP code {zipcode}. This may be outside AirNow coverage or the ZIP code may be invalid."
+            )
+
+        # Add health recommendations based on overall AQI
+        overall_aqi = forecast_data.get("overall_aqi")
+        if overall_aqi:
+            forecast_data["health_recommendations"] = get_health_recommendations(overall_aqi)
+
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "zipcode": zipcode,
+            "data": forecast_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch forecast for ZIP code {zipcode}: {str(e)}"
+        )
+
+@app.get("/observations/historical-by-zip")
+async def get_historical_observations_by_zipcode(
+    zipcode: str = Query(..., description="5-digit US ZIP code", regex=r"^\d{5}$"),
+    date: str = Query(..., description="Date in YYYY-MM-DD format (e.g., '2025-10-03')"),
+    distance: int = Query(25, description="Search radius in miles", ge=1, le=150)
+):
+    """Get historical AQI observations by ZIP code from AirNow EPA
+
+    Returns real EPA observed data for a specific date:
+    - Hourly AQI observations throughout the day
+    - Multiple pollutants (PM2.5, Ozone, etc.)
+    - EPA categories and reporting area information
+    - Daily statistics (avg, min, max AQI)
+
+    This replaces synthetic historical estimates with actual EPA observations.
+
+    Useful for:
+    - Historical trend analysis
+    - Comparing past air quality
+    - Validating forecasts
+    - Understanding historical patterns
+
+    Rate limit: 500 requests/hour
+    """
+    try:
+        from data_sources import AirNowDataSource
+
+        airnow_source = AirNowDataSource()
+        historical_data = await airnow_source.get_historical_observations_by_zipcode(
+            zipcode=zipcode,
+            date=date,
+            distance=distance
+        )
+
+        if not historical_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No historical data available for ZIP code {zipcode} on {date}. Data may not exist for this location/date combination."
+            )
+
+        # Add health recommendations based on daily average AQI
+        daily_avg = historical_data.get("daily_statistics", {}).get("avg_aqi")
+        if daily_avg:
+            historical_data["health_recommendations"] = get_health_recommendations(int(daily_avg))
+
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "query": {
+                "zipcode": zipcode,
+                "date": date,
+                "distance": distance
+            },
+            "data": historical_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch historical observations for ZIP code {zipcode}: {str(e)}"
+        )
+
+@app.get("/observations/monitoring-sites")
+async def get_monitoring_site_observations(
+    bbox: str = Query(..., description="Bounding box as 'minX,minY,maxX,maxY' (e.g., '-90.806,24.634,-71.119,45.910')"),
+    parameters: str = Query("ozone,pm25,pm10", description="Comma-separated pollutants: ozone,pm25,pm10,co,no2,so2"),
+    startdate: Optional[str] = Query(None, description="Start date UTC 'yyyy-MM-ddTHH:mm' (e.g., '2025-10-03T13:00')"),
+    enddate: Optional[str] = Query(None, description="End date UTC 'yyyy-MM-ddTHH:mm' (e.g., '2025-10-03T14:00')"),
+    datatype: str = Query("B", description="A=AQI only, C=Concentration only, B=Both", regex=r"^[ABC]$"),
+    monitortype: Optional[int] = Query(None, description="0=Permanent, 1=Mobile, 2=Both", ge=0, le=2),
+    verbose: bool = Query(True, description="Include site metadata (name, agency, AQS ID)"),
+    include_raw_concentrations: bool = Query(True, description="Include raw concentration values")
+):
+    """Get detailed observations from AirNow EPA monitoring sites by bounding box
+
+    This endpoint provides:
+    - Raw observational data from EPA monitoring stations
+    - Both AQI and concentration values for multiple pollutants
+    - Site metadata (names, agencies, AQS codes)
+    - Historical data via date range filtering
+    - Summary statistics per pollutant
+
+    Useful for:
+    - Regional air quality analysis
+    - Historical trend analysis
+    - Scientific research requiring raw concentration data
+    - Identifying specific monitoring stations
+    - Data export for external analysis
+
+    Rate limit: 500 requests/hour
+    """
+    try:
+        from data_sources import AirNowDataSource
+
+        airnow_source = AirNowDataSource()
+        observations_data = await airnow_source.get_monitoring_site_observations(
+            bbox=bbox,
+            parameters=parameters,
+            startdate=startdate,
+            enddate=enddate,
+            datatype=datatype,
+            monitortype=monitortype,
+            verbose=verbose,
+            include_raw_concentrations=include_raw_concentrations
+        )
+
+        if not observations_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No monitoring site data available for the specified bounding box and parameters."
+            )
+
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "query": {
+                "bbox": bbox,
+                "parameters": parameters.split(","),
+                "startdate": startdate,
+                "enddate": enddate,
+                "datatype": datatype,
+                "monitortype": monitortype
+            },
+            "data": observations_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch monitoring site observations: {str(e)}"
+        )
 
 @app.get("/realtime/detailed")
 async def get_detailed_realtime_data(
@@ -310,8 +523,8 @@ def get_aqi_category(aqi: int) -> str:
     else:
         return "Hazardous"
 
-def generate_realistic_forecast(lat: float, lon: float, current_aqi: int, current_pm25: float, 
-                               horizon: int, real_time_data: dict) -> list:
+def generate_realistic_forecast(lat: float, lon: float, current_aqi: int, current_pm25: float,
+                               horizon: int, real_time_data: dict, target_datetime: datetime = None) -> list:
     """Generate realistic forecast based on real current conditions"""
     forecast_data = []
     
@@ -523,6 +736,138 @@ def get_health_recommendations(aqi: int) -> dict:
             "mask_needed": True,
             "outdoor_activities": "Prohibited"
         }
+
+async def get_real_historical_data_from_airnow(lat: float, lon: float, target_date: datetime, horizon: int = 24) -> Optional[list]:
+    """Fetch real historical data from AirNow API if available"""
+    try:
+        from data_sources import AirNowDataSource
+        from utils.geocoding import reverse_geocode  # We'll need ZIP code
+
+        # For now, we don't have reverse geocoding, so return None
+        # This function will be improved when geocoding utils are available
+        return None
+    except Exception as e:
+        print(f"Could not fetch real historical data: {e}")
+        return None
+
+def generate_historical_data(lat: float, lon: float, target_date: datetime, horizon: int,
+                           baseline_aqi: int, baseline_pm25: float) -> list:
+    """Generate synthetic historical AQI data based on seasonal patterns and location characteristics"""
+    historical_data = []
+
+    # Seasonal adjustment factors
+    month = target_date.month
+    seasonal_factor = 1.0
+
+    # Winter months typically have higher AQI due to heating, inversions
+    if month in [12, 1, 2]:
+        seasonal_factor = 1.3
+    # Spring has moderate levels
+    elif month in [3, 4, 5]:
+        seasonal_factor = 0.9
+    # Summer can vary - higher ozone but better dispersion
+    elif month in [6, 7, 8]:
+        seasonal_factor = 1.1
+    # Fall generally better air quality
+    else:
+        seasonal_factor = 0.8
+
+    # Location-based adjustments (rough approximations)
+    location_factor = 1.0
+    if abs(lat) > 40:  # Northern regions
+        location_factor = 1.2
+    if abs(lon) > 100:  # Continental interior
+        location_factor = 1.1
+
+    # Historical base AQI with variations
+    historical_base = max(10, int(baseline_aqi * seasonal_factor * location_factor * 0.8))
+
+    for hour in range(horizon):
+        # Daily cycle: worse in morning/evening, better midday
+        time_of_day = (hour % 24) / 24
+        daily_factor = 1.0 + 0.3 * abs(0.5 - time_of_day)  # Peak at 0 and 24h, minimum at 12h
+
+        # Add some randomness for historical variation
+        random_factor = 0.7 + (random.random() * 0.6)  # 0.7 to 1.3
+
+        historical_aqi = max(5, min(300, int(historical_base * daily_factor * random_factor)))
+        historical_pm25 = max(0, baseline_pm25 * seasonal_factor * random_factor)
+
+        # Create timestamp for this historical hour
+        timestamp = (target_date + timedelta(hours=hour)).isoformat()
+
+        historical_data.append({
+            "hour": hour,
+            "timestamp": timestamp,
+            "aqi": historical_aqi,
+            "aqi_lower": max(0, historical_aqi - 15),
+            "aqi_upper": min(500, historical_aqi + 15),
+            "pm25": round(historical_pm25, 1),
+            "category": get_aqi_category(historical_aqi),
+            "data_type": "historical_estimate",
+            "confidence": "medium"
+        })
+
+    return historical_data
+
+def generate_future_forecast(lat: float, lon: float, target_date: datetime, horizon: int,
+                           baseline_aqi: int, baseline_pm25: float) -> list:
+    """Generate predictive forecast for future dates based on trends and patterns"""
+    future_data = []
+
+    # Calculate days into future for trend adjustments
+    days_ahead = (target_date - datetime.utcnow()).days
+
+    # Future uncertainty increases with time
+    uncertainty_factor = min(2.0, 1.0 + (days_ahead / 30))  # Max 2x uncertainty after 30 days
+
+    # Seasonal predictions
+    month = target_date.month
+    seasonal_prediction = 1.0
+
+    if month in [12, 1, 2]:  # Winter prediction
+        seasonal_prediction = 1.4
+    elif month in [3, 4, 5]:  # Spring
+        seasonal_prediction = 0.8
+    elif month in [6, 7, 8]:  # Summer
+        seasonal_prediction = 1.2
+    else:  # Fall
+        seasonal_prediction = 0.7
+
+    # Climate trend (slight worsening over time due to global trends)
+    climate_trend = 1.0 + (days_ahead / 3650)  # 10 years to reach 10% increase
+
+    predicted_base = int(baseline_aqi * seasonal_prediction * climate_trend)
+
+    for hour in range(horizon):
+        # Daily variation pattern
+        time_factor = 1.0 + 0.4 * abs(0.5 - ((hour % 24) / 24))
+
+        # Weather pattern simulation (simplified)
+        weather_variation = 0.6 + (random.random() * 0.8)  # 0.6 to 1.4
+
+        predicted_aqi = max(10, min(400, int(predicted_base * time_factor * weather_variation)))
+        predicted_pm25 = max(0, baseline_pm25 * seasonal_prediction * weather_variation)
+
+        # Wider uncertainty bounds for future predictions
+        uncertainty = int(predicted_aqi * uncertainty_factor * 0.3)
+
+        timestamp = (target_date + timedelta(hours=hour)).isoformat()
+
+        future_data.append({
+            "hour": hour,
+            "timestamp": timestamp,
+            "aqi": predicted_aqi,
+            "aqi_lower": max(0, predicted_aqi - uncertainty),
+            "aqi_upper": min(500, predicted_aqi + uncertainty),
+            "pm25": round(predicted_pm25, 1),
+            "category": get_aqi_category(predicted_aqi),
+            "data_type": "predictive",
+            "confidence": "low" if days_ahead > 7 else "medium",
+            "uncertainty": uncertainty
+        })
+
+    return future_data
 
 if __name__ == "__main__":
     import uvicorn

@@ -5,7 +5,6 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-// Fix for default markers not showing
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl: unknown })._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -48,7 +47,6 @@ export function Map({ onLocationSelect, selectedLocation, height = '400px' }: Ma
     )
   }
 
-  // Default to Los Angeles coordinates
   const defaultCenter: [number, number] = [34.0522, -118.2437]
   const center: [number, number] = selectedLocation 
     ? [selectedLocation.lat, selectedLocation.lon] 

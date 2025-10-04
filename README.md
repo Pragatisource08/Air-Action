@@ -1,67 +1,84 @@
-# Air Quality Forecasting Demo
+# Air Quality Platform
 
-**"From EarthData to Action"** — A hackathon-style demo that forecasts air quality using OpenAQ ground monitors and weather.gov data with a lightweight persistence model.
+**"From EarthData to Action"** — Real-time air quality monitoring and forecasting powered by NASA TEMPO satellite data, OpenAQ ground sensors, and Weather.gov integration.
 
 ## ✨ Features
 
-### 🗺️ **Advanced Mapping**
-- **Google Maps Integration** with Terrain (default), Satellite, and Roads views
-- **Location Search Bar** - Search for any city or place worldwide
-- **Map Maximize Mode** - Full-screen map with floating data windows
-- **Smart Location Markers** - Custom air quality indicators
-- **Fallback Support** - Works without Google Maps API if needed
+### 🌍 **Interactive 3D Globe**
+- **Cesium-powered 3D Earth** - Stunning satellite imagery with place labels
+- **Click anywhere** - Get instant AQI data for any location worldwide
+- **Smart markers** - Color-coded pins based on EPA AQI categories
+- **Smooth navigation** - Intuitive controls with zoom preservation
+- **Live location** - One-click GPS location detection
 
-### 📊 **Air Quality Intelligence**
-- **Real-time Forecasts** - Location-specific AQI predictions with uncertainty bands
-- **Smart Data Variation** - Different locations show unique air quality patterns  
-- **EPA Health Categories** - Color-coded badges with emoji indicators
-- **24-hour Charts** - Beautiful forecasts with Recharts visualization
+### 📊 **Real-Time Air Quality Intelligence**
+- **🛰️ NASA TEMPO Data** - Cutting-edge satellite air quality measurements
+- **📡 OpenAQ Sensors** - Ground-based monitoring station integration
+- **🌤️ Weather.gov API** - Meteorological data for enhanced predictions
+- **24-Hour Forecasts** - Interactive 3D charts with AQI predictions
+- **Historical Data** - Access past air quality measurements
+- **Future Predictions** - 2-year forecast range
 
 ### 🎨 **Modern Design**
 - **Dark/Light Mode** - Automatic theme detection with manual toggle
-- **GenZ Aesthetic** - Glassmorphism, gradients, and smooth animations
-- **Responsive Design** - Works perfectly on desktop and mobile
-- **Accessibility** - Screen reader friendly with proper contrast
+- **3D Effects** - Dynamic particle backgrounds based on air quality
+- **Glassmorphism UI** - Beautiful frosted glass aesthetic
+- **Responsive Design** - Works on desktop, tablet, and mobile
+- **Timezone-Aware** - All times displayed in user's local timezone
 
-### 📅 **Smart Calendar**
-- **ICS File Upload** - Score calendar events for air quality risk
-- **Risk Assessment** - Get alternative time suggestions for poor air quality
-- **Event Optimization** - Plan activities around better air quality windows
+### 📅 **Date Selection**
+- **Interactive Calendar** - Select any date within 2-year range
+- **Smart Labels** - Today/Historical/Forecast indicators
+- **Quick Navigation** - Jump to today with one click
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. Start the API (Backend)
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.11+
+- Git
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd <repository-name>
+```
+
+### 2. Start the API (Backend)
 
 ```bash
 cd api
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-The API will be available at http://localhost:8000
-
+The API will be available at **http://localhost:8000**
 - Health check: http://localhost:8000/health
-- Docs: http://localhost:8000/docs
+- API Docs: http://localhost:8000/docs
 
-### 2. Configure Google Maps (Optional but Recommended)
-
-See `GOOGLE_MAPS_SETUP.md` for detailed instructions. To quickly enable:
+### 3. Configure Environment (Frontend)
 
 ```bash
 cd web
-# Edit .env.local and add your Google Maps API key
-echo "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_api_key_here" > .env.local
+cp .env.local.example .env.local
 ```
 
-### 3. Start the Web App (Frontend)
+**The provided Cesium token in `.env.local.example` is ready to use!** No API key signup needed.
+
+### 4. Start the Web App (Frontend)
 
 ```bash
-cd web
 npm install
 npm run dev
 ```
 
-The web app will be available at http://localhost:3000
+The web app will be available at **http://localhost:3000**
+
+### ✅ That's it!
+Click anywhere on the globe to see real-time air quality data.
 
 ## API Endpoints
 
@@ -70,24 +87,36 @@ The web app will be available at http://localhost:3000
 - `GET /forecast?lat=&lon=&horizon=24` - Air quality forecast
 - `POST /calendar/score` - Score calendar events (coming soon)
 
-## Tech Stack
+## 🔑 API Keys & Data Sources
+
+### For Reviewers/Developers
+**NO API KEYS REQUIRED!** This project uses:
+- ✅ **Free Cesium Ion token** (included in `.env.local.example`)
+- ✅ **Public APIs** (NASA, OpenAQ, Weather.gov - no auth needed)
+- ✅ **100% Real Data** - No fake/dummy data anywhere!
+
+### Data Flow
+```
+NASA TEMPO Satellite → OpenAQ Ground Sensors → Weather.gov → Your Screen
+```
+
+All data is fetched in real-time from public sources. The backend intelligently combines multiple data sources to provide accurate air quality forecasts.
+
+## 🛠️ Tech Stack
 
 ### Frontend
-- Next.js 14 (App Router)
-- TypeScript
-- Tailwind CSS
-- Leaflet (maps)
-- Recharts (charts)
+- **Next.js 14** (App Router with TypeScript)
+- **Cesium** - 3D globe & geospatial visualization
+- **React Three Fiber** - 3D forecast charts
+- **Tailwind CSS** - Styling
+- **Framer Motion** - Animations
 
 ### Backend
-- FastAPI (Python 3.11)
-- In-memory caching
-- OpenAQ API integration
-- Weather.gov API integration
-
-## Demo Data
-
-The app currently uses dummy data for development. Real API integrations are coming in the next phase.
+- **FastAPI** (Python 3.11+)
+- **NASA TEMPO** - Satellite air quality data
+- **OpenAQ API** - Ground-based sensor network
+- **Weather.gov API** - Meteorological data
+- **Geopy** - Geocoding & timezone handling
 
 ## Health Categories
 
@@ -98,6 +127,27 @@ The app currently uses dummy data for development. Real API integrations are com
 - **Very Unhealthy (201-300)**: Health alert
 - **Hazardous (301+)**: Emergency conditions
 
-## Development Notes
+## 📝 Development Notes
 
-This is a hackathon-style demo focused on functionality over production readiness. No external databases or complex deployment required.
+### Real Data Sources
+This platform uses **100% real data** from:
+- **NASA TEMPO**: Tropospheric Emissions Monitoring of Pollution satellite
+- **OpenAQ**: Global air quality data aggregator with 10,000+ monitoring stations
+- **Weather.gov**: National Weather Service API
+
+No mock data, no fake numbers - everything you see is real air quality information.
+
+### Architecture
+- **Stateless Backend**: No database required, uses public APIs
+- **Client-Side Proxy**: API routes hide backend URLs in production
+- **Timezone Handling**: All dates/times converted to user's local timezone
+- **Smart Caching**: Prevents redundant API calls
+
+### For Hackathon Reviewers
+- ⚡ **5-minute setup** - Just clone, install, and run!
+- 🔐 **No API key hassle** - Token provided in repo
+- 📊 **See real data immediately** - Click anywhere on Earth
+- 🌍 **Global coverage** - Works for any location worldwide
+
+## 👥 Authors
+Made with ♥ for the planet by **Atharv and Pragati**

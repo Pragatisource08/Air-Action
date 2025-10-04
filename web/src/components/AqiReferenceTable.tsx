@@ -23,7 +23,7 @@ export function AqiReferenceTable() {
   const [loading, setLoading] = useState(false)
 
   const fetchReferenceData = async () => {
-    if (referenceData) return // Don't fetch if we already have data
+    if (referenceData) return
     
     setLoading(true)
     try {

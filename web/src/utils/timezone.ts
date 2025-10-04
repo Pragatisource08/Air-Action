@@ -1,22 +1,15 @@
-// Smart timezone utilities with automatic detection
 
 export const IST_TIMEZONE = 'Asia/Kolkata';
 export const IST_OFFSET = '+05:30';
 
-/**
- * Get user's current timezone
- */
 export function getUserTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
-    return IST_TIMEZONE; // Fallback to IST
+    return IST_TIMEZONE;
   }
 }
 
-/**
- * Get timezone abbreviation from timezone string
- */
 export function getTimezoneAbbreviation(timezone: string): string {
   try {
     const date = new Date();
@@ -32,9 +25,6 @@ export function getTimezoneAbbreviation(timezone: string): string {
   }
 }
 
-/**
- * Format a timestamp to user's local timezone
- */
 export function formatToLocalTime(timestamp: string | Date): string {
   const date = new Date(timestamp);
   const userTimezone = getUserTimezone();
@@ -50,9 +40,6 @@ export function formatToLocalTime(timestamp: string | Date): string {
   });
 }
 
-/**
- * Format time only to user's local timezone
- */
 export function formatTimeToLocal(timestamp: string | Date): string {
   const date = new Date(timestamp);
   const userTimezone = getUserTimezone();
@@ -65,9 +52,6 @@ export function formatTimeToLocal(timestamp: string | Date): string {
   });
 }
 
-/**
- * Format date and time with timezone indicator
- */
 export function formatWithTimezone(timestamp: string | Date, includeTimezone: boolean = true): string {
   const userTimezone = getUserTimezone();
   const formatted = formatToLocalTime(timestamp);
@@ -78,9 +62,6 @@ export function formatWithTimezone(timestamp: string | Date, includeTimezone: bo
   return `${formatted} ${tzAbbr}`;
 }
 
-/**
- * Get user's timezone display
- */
 export function getTimezoneDisplay(): string {
   const userTimezone = getUserTimezone();
   const tzAbbr = getTimezoneAbbreviation(userTimezone);
@@ -98,9 +79,6 @@ export function getTimezoneDisplay(): string {
   }
 }
 
-/**
- * Format for chart display (shorter format)
- */
 export function formatForChart(timestamp: string | Date): string {
   const date = new Date(timestamp);
   const userTimezone = getUserTimezone();
@@ -115,6 +93,20 @@ export function formatForChart(timestamp: string | Date): string {
   });
 }
 
-// Legacy IST functions for backward compatibility
 export const formatToIST = formatToLocalTime;
 export const formatTimeToIST = formatTimeToLocal;
+
+// Get current date in user's local timezone as YYYY-MM-DD
+export function getTodayInLocalTimezone(): string {
+  const userTimezone = getUserTimezone();
+  const now = new Date();
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: userTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+
+  return formatter.format(now); // Returns YYYY-MM-DD format
+}

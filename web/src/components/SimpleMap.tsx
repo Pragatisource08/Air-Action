@@ -46,7 +46,6 @@ export function SimpleMap({
 
   return (
     <div className="relative">
-      {/* Map Type Selector */}
       {onMapTypeChange && (
         <div className="absolute top-4 right-4 z-10 flex bg-white dark:bg-black rounded-2xl p-1 shadow-lg border border-gray-200 dark:border-gray-600">
           <button
@@ -82,7 +81,6 @@ export function SimpleMap({
         </div>
       )}
 
-      {/* Maximize Button */}
       {onToggleMaximize && (
         <button
           onClick={onToggleMaximize}
@@ -114,7 +112,6 @@ export function SimpleMap({
             Choose a location below or enter coordinates to get air quality data
           </p>
 
-          {/* Quick Location Buttons */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
             {quickLocations.map((location) => (
               <button
@@ -127,7 +124,6 @@ export function SimpleMap({
             ))}
           </div>
 
-          {/* Manual Coordinate Entry */}
           <form onSubmit={handleCoordinateSubmit} className="w-full max-w-md">
             <div className="flex gap-2">
               <input

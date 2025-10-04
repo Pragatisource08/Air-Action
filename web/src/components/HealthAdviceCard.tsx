@@ -37,7 +37,6 @@ export function HealthAdviceCard({ aqi }: HealthAdviceCardProps) {
       }
     } catch (error) {
       console.error('Failed to fetch health recommendations:', error)
-      // Fallback to local recommendations
       setHealthData(getLocalHealthAdvice(aqi))
     } finally {
       setLoading(false)
@@ -134,14 +133,19 @@ export function HealthAdviceCard({ aqi }: HealthAdviceCardProps) {
           
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl p-4">
-              <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center">
-                Current Conditions - {currentHealthData.level}
-              </h4>
+              <div className="mb-2">
+                <h4 className="text-base font-medium text-gray-800 dark:text-gray-200 mb-1">
+                  Current Conditions
+                </h4>
+                <p className="text-base font-bold text-gray-800 dark:text-gray-200 break-words">
+                  {currentHealthData.level}
+                </p>
+              </div>
               <p className="text-sm text-gray-700 dark:text-gray-300">{currentHealthData.message}</p>
             </div>
             
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl p-4">
-              <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-3 flex items-center">
+              <h4 className="text-base font-medium text-gray-800 dark:text-gray-200 mb-3 flex items-center">
                 Key Recommendations
               </h4>
               <ul className="space-y-2">

@@ -39,7 +39,6 @@ export function LocationSearch({ onLocationSelect }: LocationSearchProps) {
 
     setIsLoading(true)
     try {
-      // Using Nominatim (OpenStreetMap) geocoding as fallback since it's free
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&addressdetails=1`
       )
@@ -73,7 +72,7 @@ export function LocationSearch({ onLocationSelect }: LocationSearchProps) {
     const lat = parseFloat(result.lat)
     const lon = parseFloat(result.lon)
     onLocationSelect(lat, lon, result.display_name)
-    setQuery(result.display_name.split(',')[0]) // Show just the main location name
+    setQuery(result.display_name.split(',')[0])
     setShowResults(false)
   }
 

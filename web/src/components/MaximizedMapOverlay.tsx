@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { AqiBadge } from './AqiBadge'
 import { HealthAdviceCard } from './HealthAdviceCard'
 import { ForecastChart } from './ForecastChart'
+import { reverseGeocode } from '@/utils/geocoding'
 
 interface ForecastData {
   hour: number
@@ -31,6 +32,7 @@ interface MaximizedMapOverlayProps {
   selectedLocation: { lat: number; lon: number } | null
   loading: boolean
   error: string | null
+  onLocationRequest?: () => void
 }
 
 export function MaximizedMapOverlay({
@@ -40,9 +42,28 @@ export function MaximizedMapOverlay({
   forecastData,
   selectedLocation,
   loading,
-  error
+  error,
+  onLocationRequest
 }: MaximizedMapOverlayProps) {
   const [showChart, setShowChart] = useState(false)
+  const [locationName, setLocationName] = useState<string>('')
+  const [loadingLocation, setLoadingLocation] = useState(false)
+
+  useEffect(() => {
+    if (selectedLocation) {
+      setLoadingLocation(true)
+      reverseGeocode(selectedLocation.lat, selectedLocation.lon)
+        .then(name => {
+          setLocationName(name)
+          setLoadingLocation(false)
+        })
+        .catch(() => {
+          setLocationName(`${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lon.toFixed(4)}`)
+          setLoadingLocation(false)
+        })
+    }
+  }, [selectedLocation])
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -67,29 +88,32 @@ export function MaximizedMapOverlay({
         </div>
       </div>
 
-      {/* Top Control Bar */}
       <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-[60] flex items-center space-x-4">
-        {/* Location Info */}
         {selectedLocation && (
           <div className="backdrop-blur-sm bg-white/95 dark:bg-black/95 rounded-2xl px-4 py-2 border border-white/30 dark:border-gray-600/70 shadow-xl">
-            <p className="text-sm text-gray-700 dark:text-gray-300 font-mono">
-              📍 {selectedLocation.lat.toFixed(4)}, {selectedLocation.lon.toFixed(4)}
-            </p>
+            <div className="flex items-center space-x-2">
+              <span>📍</span>
+              {loadingLocation ? (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-pulse">⏳</div>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">Loading location...</span>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+                  {locationName}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Current AQI */}
         {forecastData && (
           <div className="backdrop-blur-sm bg-white/95 dark:bg-black/95 rounded-2xl px-4 py-2 border border-white/30 dark:border-gray-600/70 shadow-xl flex items-center space-x-3">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current AQI:</span>
             <AqiBadge aqi={currentAqi} size="sm" />
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              PM2.5: {forecastData.forecast[0]?.pm25?.toFixed(1)} μg/m³
-            </span>
           </div>
         )}
 
-        {/* Loading/Error States */}
         {loading && (
           <div className="backdrop-blur-sm bg-blue-50/95 dark:bg-blue-900/95 rounded-2xl px-4 py-2 border border-blue-200/50 dark:border-blue-600/50 shadow-xl">
             <div className="flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400">
@@ -109,9 +133,20 @@ export function MaximizedMapOverlay({
         )}
       </div>
 
-      {/* Top Right Controls */}
       <div className="absolute top-20 right-6 z-[100] flex items-center space-x-3">
-        {/* Chart Toggle Button */}
+        {onLocationRequest && (
+          <button
+            onClick={onLocationRequest}
+            className="bg-white dark:bg-black rounded-2xl p-3 shadow-2xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+            title="Track My Location"
+          >
+            <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        )}
+
         {selectedLocation && forecastData && (
           <button
             onClick={() => setShowChart(!showChart)}
@@ -128,7 +163,6 @@ export function MaximizedMapOverlay({
           </button>
         )}
 
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="bg-white dark:bg-black rounded-2xl p-3 shadow-2xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
@@ -139,14 +173,12 @@ export function MaximizedMapOverlay({
         </button>
       </div>
 
-      {/* Collapsible Side Panel for Chart */}
       {selectedLocation && forecastData && (
         <div className={`absolute top-0 right-0 h-full z-[55] transition-transform duration-300 ease-in-out ${
           showChart ? 'translate-x-0' : 'translate-x-full'
         }`}>
-          <div className="w-96 h-full bg-white/95 dark:bg-black/95 backdrop-blur-sm border-l border-white/30 dark:border-gray-600/70 shadow-2xl">
+          <div className="w-[420px] h-full bg-white/95 dark:bg-black/95 backdrop-blur-sm border-l border-white/30 dark:border-gray-600/70 shadow-2xl">
             <div className="flex flex-col h-full">
-              {/* Panel Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-gray-600/50">
                 <div className="flex items-center space-x-3">
                   <span className="text-2xl">📈</span>
@@ -165,20 +197,16 @@ export function MaximizedMapOverlay({
                 </button>
               </div>
 
-              {/* Panel Content */}
-              <div className="flex-1 p-6 overflow-y-auto">
-                {/* Chart */}
-                <div className="mb-6">
-                  <ForecastChart data={forecastData.forecast} height={280} />
+              <div className="flex-1 p-4 overflow-y-auto">
+                <div className="mb-4">
+                  <ForecastChart data={forecastData.forecast} height={260} />
                 </div>
 
-                {/* Health Advisory */}
                 <div className="mb-6">
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Health Advisory</h4>
                   <HealthAdviceCard aqi={currentAqi} />
                 </div>
 
-                {/* Additional Info */}
                 <div className="space-y-4">
                   <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4">
                     <h5 className="font-semibold text-gray-900 dark:text-white mb-2">Current Conditions</h5>

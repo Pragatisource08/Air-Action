@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 
-// You'll need to get a free API key from https://account.mapbox.com/
 const MAPBOX_ACCESS_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''
 
 interface MapboxAQIProps {
@@ -26,7 +25,6 @@ export function MapboxAQI({
   const currentMarker = useRef<mapboxgl.Marker | null>(null)
 
 
-  // Initialize map
   useEffect(() => {
     if (!mapRef.current || !MAPBOX_ACCESS_TOKEN) return
 
@@ -40,10 +38,8 @@ export function MapboxAQI({
       projection: 'mercator'
     })
 
-    // Add map controls
     mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right')
 
-    // Add fullscreen control if not maximized
     if (!isMaximized && onToggleMaximize) {
       const fullscreenBtn = document.createElement('button')
       fullscreenBtn.className = 'mapbox-ctrl mapbox-ctrl-group'
@@ -60,7 +56,6 @@ export function MapboxAQI({
     }
 
     mapInstance.on('load', () => {
-      // Add click handler for location selection
       mapInstance.on('click', (e) => {
         if (onLocationSelect) {
           onLocationSelect(e.lngLat.lat, e.lngLat.lng)
@@ -79,16 +74,13 @@ export function MapboxAQI({
   }, [onLocationSelect, onToggleMaximize, isMaximized])
 
 
-  // Update selected location marker
   useEffect(() => {
     if (!map.current || !selectedLocation) return
 
-    // Remove existing marker
     if (currentMarker.current) {
       currentMarker.current.remove()
     }
 
-    // Create new marker
     const markerElement = document.createElement('div')
     markerElement.className = 'selected-location-marker'
     markerElement.style.cssText = `
@@ -107,7 +99,6 @@ export function MapboxAQI({
 
     currentMarker.current = marker
 
-    // Center map on selected location
     map.current.flyTo({
       center: [selectedLocation.lon, selectedLocation.lat],
       zoom: 10,
@@ -115,7 +106,6 @@ export function MapboxAQI({
     })
   }, [selectedLocation])
 
-  // Show token warning if not configured
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
       <div
@@ -145,7 +135,6 @@ export function MapboxAQI({
         style={{ height }}
       />
 
-      {/* Map Style Toggle */}
       <div className="absolute top-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1">
         <div className="flex space-x-1">
           <button
@@ -172,7 +161,6 @@ export function MapboxAQI({
         </div>
       </div>
 
-      {/* Instructions */}
       <div className="absolute bottom-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 max-w-xs">
         <h4 className="font-bold text-sm mb-2 text-gray-900 dark:text-white">Get Air Quality Data</h4>
         <p className="text-xs text-gray-700 dark:text-gray-300">

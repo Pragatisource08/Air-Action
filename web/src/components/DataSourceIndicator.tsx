@@ -3,7 +3,9 @@
 interface DataSource {
   satellite: boolean
   ground_sensors: boolean
+  airnow?: boolean
   aqicn?: boolean
+  openaq?: boolean
   weather: boolean
 }
 
@@ -38,7 +40,7 @@ export function DataSourceIndicator({ dataSources, dataQuality, model, className
   return (
     <div className={`bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800/50 dark:to-blue-900/20 rounded-2xl p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
-        <h4 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center">
+        <h4 className="text-lg font-bold text-gray-800 dark:text-gray-200 flex items-center">
           <span className="mr-2">🔗</span>
           Data Sources
         </h4>
@@ -49,10 +51,10 @@ export function DataSourceIndicator({ dataSources, dataQuality, model, className
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
         <div className={`text-center p-2 rounded-xl ${
-          dataSources.satellite 
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' 
+          dataSources.satellite
+            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
             : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
         }`}>
           <div className="text-lg">🛰️</div>
@@ -61,13 +63,23 @@ export function DataSourceIndicator({ dataSources, dataQuality, model, className
         </div>
 
         <div className={`text-center p-2 rounded-xl ${
-          dataSources.ground_sensors
+          dataSources.openaq
             ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
             : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
         }`}>
           <div className="text-lg">📡</div>
           <div className="text-xs font-medium">OpenAQ</div>
-          <div className="text-xs">{dataSources.ground_sensors ? 'Active' : 'Offline'}</div>
+          <div className="text-xs">{dataSources.openaq ? 'Active' : 'Offline'}</div>
+        </div>
+
+        <div className={`text-center p-2 rounded-xl ${
+          dataSources.airnow
+            ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+            : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+        }`}>
+          <div className="text-lg">🏛️</div>
+          <div className="text-xs font-medium">EPA AirNow</div>
+          <div className="text-xs">{dataSources.airnow ? 'Active' : 'Offline'}</div>
         </div>
 
         <div className={`text-center p-2 rounded-xl ${

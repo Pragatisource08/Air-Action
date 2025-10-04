@@ -33,7 +33,6 @@ export function OpenStreetMap({
   const [aqiData, setAqiData] = useState<any[]>([])
   const [isLoadingAQI, setIsLoadingAQI] = useState(false)
 
-  // Tile layer URLs for different map types
   const tileUrls = {
     roadmap: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     terrain: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -47,7 +46,6 @@ export function OpenStreetMap({
     satellite: '© Esri, Maxar, Earthstar Geographics'
   }
 
-  // Fetch AQI data for current map bounds
   const fetchAQIData = async (mapInstance: any) => {
     if (!mapInstance) return
 
@@ -82,7 +80,6 @@ export function OpenStreetMap({
     }
   }
 
-  // Create AQI heatmap layer
   const createAQIHeatmapLayer = () => {
     if (!window.L || !window.L.heatLayer || !aqiData.length) {
       console.log('Heatmap layer not available:', {
@@ -96,7 +93,7 @@ export function OpenStreetMap({
     const heatmapPoints = aqiData.map(point => [
       point.lat,
       point.lon,
-      Math.max(0.3, point.aqi / 150) // Better visibility with higher minimum intensity
+      Math.max(0.3, point.aqi / 150)
     ])
 
     console.log('Creating heatmap with points:', heatmapPoints.length, heatmapPoints.slice(0, 3))
@@ -105,34 +102,30 @@ export function OpenStreetMap({
       radius: 50,
       blur: 30,
       maxZoom: 18,
-      max: 2.0, // Increased max for better visibility
-      minOpacity: 0.4, // Minimum opacity for better visibility
+      max: 2.0,
+      minOpacity: 0.4,
       gradient: {
-        0.0: 'rgba(0,228,0,0.8)',    // Good - Green with transparency
-        0.2: 'rgba(255,255,0,0.8)',  // Moderate - Yellow
-        0.4: 'rgba(255,126,0,0.8)',  // Unhealthy for Sensitive - Orange
-        0.6: 'rgba(255,0,0,0.8)',    // Unhealthy - Red
-        0.8: 'rgba(143,63,151,0.8)', // Very Unhealthy - Purple
-        1.0: 'rgba(126,0,35,0.8)'    // Hazardous - Maroon
+        0.0: 'rgba(0,228,0,0.8)',
+        0.2: 'rgba(255,255,0,0.8)',
+        0.4: 'rgba(255,126,0,0.8)',
+        0.6: 'rgba(255,0,0,0.8)',
+        0.8: 'rgba(143,63,151,0.8)',
+        1.0: 'rgba(126,0,35,0.8)'
       }
     })
   }
 
   useEffect(() => {
-    // Load Leaflet dynamically
     const loadLeaflet = async () => {
       if (typeof window !== 'undefined' && !window.L) {
-        // Load Leaflet CSS
         const link = document.createElement('link')
         link.rel = 'stylesheet'
         link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
         document.head.appendChild(link)
 
-        // Load Leaflet JS
         const script = document.createElement('script')
         script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
         script.onload = () => {
-          // Load Leaflet Heatmap plugin
           const heatmapScript = document.createElement('script')
           heatmapScript.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js'
           heatmapScript.onload = () => {
@@ -151,32 +144,31 @@ export function OpenStreetMap({
 
       const L = window.L
       
-      // Initialize map
       const mapInstance = L.map(mapRef.current, {
         zoomControl: true,
-        attributionControl: false
+        attributionControl: false,
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0,
+        worldCopyJump: false,
+        continuousWorld: false
       }).setView([selectedLocation?.lat || 34.0522, selectedLocation?.lon || -118.2437], 10)
 
-      // Add tile layer
       L.tileLayer(tileUrls[mapType], {
         attribution: attributions[mapType],
         maxZoom: 18
       }).addTo(mapInstance)
 
-      // Add attribution control
       L.control.attribution({
         position: 'bottomright',
         prefix: false
       }).addTo(mapInstance)
 
-      // Add click handler
       mapInstance.on('click', (e: any) => {
         if (onLocationSelect) {
           onLocationSelect(e.latlng.lat, e.latlng.lng)
         }
       })
 
-      // Add map move listeners to refresh AQI data
       mapInstance.on('moveend', () => {
         if (showAQIOverlay) {
           fetchAQIData(mapInstance)
@@ -192,7 +184,6 @@ export function OpenStreetMap({
       setMap(mapInstance)
       setIsLoaded(true)
 
-      // Initial AQI data fetch if overlay is already enabled
       if (showAQIOverlay) {
         fetchAQIData(mapInstance)
       }
@@ -208,24 +199,20 @@ export function OpenStreetMap({
     }
   }, [])
 
-  // Update map type when prop changes
   useEffect(() => {
     if (map && window.L) {
-      // Remove existing tile layers
       map.eachLayer((layer: any) => {
         if (layer._url) {
           map.removeLayer(layer)
         }
       })
 
-      // Add new tile layer
       const L = window.L
       L.tileLayer(tileUrls[mapType], {
         attribution: attributions[mapType],
         maxZoom: 18
       }).addTo(map)
 
-      // Add labels overlay for satellite view
       if (mapType === 'satellite') {
         L.tileLayer(tileUrls.satelliteLabels, {
           maxZoom: 18,
@@ -235,17 +222,14 @@ export function OpenStreetMap({
     }
   }, [mapType, map])
 
-  // Update marker when selected location changes
   useEffect(() => {
     if (map && window.L && selectedLocation) {
       const L = window.L
 
-      // Remove existing marker
       if (marker) {
         map.removeLayer(marker)
       }
 
-      // Create custom icon
       const customIcon = L.divIcon({
         html: `
           <div style="
@@ -272,44 +256,36 @@ export function OpenStreetMap({
         className: 'custom-marker'
       })
 
-      // Add new marker
       const newMarker = L.marker([selectedLocation.lat, selectedLocation.lon], {
         icon: customIcon
       }).addTo(map)
 
       setMarker(newMarker)
 
-      // Center map on marker
       map.setView([selectedLocation.lat, selectedLocation.lon], map.getZoom())
     }
   }, [selectedLocation, map])
 
-  // Handle AQI overlay toggling
   useEffect(() => {
     if (!map || !isLoaded) return
 
     if (showAQIOverlay) {
-      // Fetch AQI data and add overlay
       fetchAQIData(map)
     } else {
-      // Remove existing heatmap layer
-      if (aqiHeatmapLayer) {
+        if (aqiHeatmapLayer) {
         map.removeLayer(aqiHeatmapLayer)
         setAqiHeatmapLayer(null)
       }
     }
   }, [showAQIOverlay, map, isLoaded])
 
-  // Update heatmap when AQI data changes
   useEffect(() => {
     if (!map || !showAQIOverlay || !aqiData.length) return
 
-    // Remove existing heatmap layer
     if (aqiHeatmapLayer) {
       map.removeLayer(aqiHeatmapLayer)
     }
 
-    // Create and add new heatmap layer
     const newHeatmapLayer = createAQIHeatmapLayer()
     if (newHeatmapLayer) {
       newHeatmapLayer.addTo(map)
@@ -317,15 +293,12 @@ export function OpenStreetMap({
     }
   }, [aqiData, map, showAQIOverlay])
 
-  // Handle fullscreen mode changes - invalidate map size
   useEffect(() => {
     if (!map) return
 
-    // Small delay to let the DOM update before invalidating size
     const timer = setTimeout(() => {
       map.invalidateSize(true)
 
-      // If AQI overlay is active, refresh data for new view
       if (showAQIOverlay) {
         fetchAQIData(map)
       }
@@ -336,9 +309,7 @@ export function OpenStreetMap({
 
   return (
     <div className="relative">
-      {/* Compact Controls */}
       <div className="absolute top-4 right-4 z-[1000] flex gap-2">
-        {/* Map Type Dropdown */}
         {onMapTypeChange && (
           <div className="relative">
             <select
@@ -353,7 +324,6 @@ export function OpenStreetMap({
           </div>
         )}
 
-        {/* AQI Overlay Toggle */}
         {onToggleAQIOverlay && (
           <button
             onClick={onToggleAQIOverlay}
@@ -378,7 +348,6 @@ export function OpenStreetMap({
         )}
       </div>
 
-      {/* Maximize Button */}
       {onToggleMaximize && (
         <button
           onClick={onToggleMaximize}
@@ -415,7 +384,6 @@ export function OpenStreetMap({
   )
 }
 
-// Add global type declaration for Leaflet
 declare global {
   interface Window {
     L: any
